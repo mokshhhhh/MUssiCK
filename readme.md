@@ -8,6 +8,11 @@
 **MUssiCK** is a premium, full-featured music streaming application built with React Native (Expo). It offers a seamless audio experience with a modern UI, real-time player synchronization, and robust backend integration for fetching high-quality metadata.
 
 ---
+###Architecture and Overview
+<img width="1597" height="638" alt="ss1" src="https://github.com/user-attachments/assets/0db264ed-3ea2-475d-b306-29c969061a6d" />
+<img width="1678" height="595" alt="ss2" src="https://github.com/user-attachments/assets/4f16fecd-98f4-4869-8969-e37714104980" />
+<img width="380" height="367" alt="ss3" src="https://github.com/user-attachments/assets/c73da1a7-4f54-4d5f-b444-c0be4a9f9614" />
+
 
 
 
