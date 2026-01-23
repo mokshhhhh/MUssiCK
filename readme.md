@@ -69,7 +69,11 @@ A custom networking bridge that abstracts away the complexity of the JioSaavn AP
 - **Solution:** We implemented a `politeFetch` mechanism that queues promises. Even if the Home Screen requests 10 different artist images at once, the Service Layer forces them to execute one by one, ensuring high reliability.
 
 ---
+## 📱 Download the App
 
+Ready to try it out? Download the latest APK directly to your Android device:
+
+[![Download APK](https://img.shields.io/badge/Download-APK-2E7D32?style=for-the-badge&logo=android&logoColor=white)](YOUR_EAS_BUILD_LINK_HERE)
 ## ⚡️ Getting Started
 
 To run this project locally, follow these steps:
