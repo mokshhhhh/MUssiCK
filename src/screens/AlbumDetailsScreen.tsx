@@ -10,7 +10,7 @@ import {
   Dimensions, 
   StatusBar 
 } from 'react-native';
-import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
+import { useNavigation, RouteProp, useRoute } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { getAlbumSongs, Album, Song } from '../services/api';
 import { useMusicStore } from '../store/useMusicStore';

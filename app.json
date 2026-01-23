@@ -47,7 +47,8 @@
             "newArchEnabled": false
           }
         }
-      ]
+      ],
+      "expo-font"
     ],
     "extra": {
       "eas": {
