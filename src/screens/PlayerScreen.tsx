@@ -1,17 +1,20 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, Modal } from 'react-native';
 import { useProgress } from 'react-native-track-player';
+import TrackPlayer from 'react-native-track-player';
 import { useMusicStore } from '../store/useMusicStore';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 
 interface PlayerScreenProps {
-  visible: boolean;
-  onClose: () => void;
+  visible?: boolean;
+  onClose?: () => void;
 }
 
 const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
-  const { activeTrack, isPlaying, togglePlay } = useMusicStore();
+  const { activeTrack, isPlaying, togglePlay, skipToNext, skipToPrevious, toggleFavorite, isFavorite } = useMusicStore();
   const { position, duration } = useProgress();
+  const navigation = useNavigation<any>();
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -19,7 +22,17 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const seekBy = async (seconds: number) => {
+    try {
+      const newPosition = Math.max(0, Math.min(position + seconds, duration));
+      await TrackPlayer.seekTo(newPosition);
+    } catch (error) {
+      console.error('Error seeking:', error);
+    }
+  };
+
   const progress = duration > 0 ? (position / duration) * 100 : 0;
+  const isFavorited = activeTrack ? isFavorite(activeTrack.id) : false;
 
   if (!activeTrack) return null;
 
@@ -34,8 +47,26 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="chevron-down" size={28} color="#fff" />
+            <Ionicons name="chevron-down" size={28} color="#333" />
           </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity 
+              onPress={() => navigation.navigate('Queue')}
+              style={styles.headerButton}
+            >
+              <Ionicons name="list" size={24} color="#333" />
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => activeTrack && toggleFavorite(activeTrack)}
+              style={styles.headerButton}
+            >
+              <Ionicons 
+                name={isFavorited ? "heart" : "heart-outline"} 
+                size={24} 
+                color={isFavorited ? "#FF6B35" : "#333"} 
+              />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Artwork */}
@@ -61,12 +92,30 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
             <Text style={styles.timeText}>{formatTime(position)}</Text>
             <Text style={styles.timeText}>{formatTime(duration)}</Text>
           </View>
+          
+          {/* +/- 5 Second Controls */}
+          <View style={styles.seekControls}>
+            <TouchableOpacity 
+              onPress={() => seekBy(-5)} 
+              style={styles.seekButton}
+            >
+              <Ionicons name="remove" size={16} color="#666" />
+              <Text style={styles.seekText}>5</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => seekBy(5)} 
+              style={styles.seekButton}
+            >
+              <Ionicons name="add" size={16} color="#666" />
+              <Text style={styles.seekText}>5</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Controls */}
         <View style={styles.controls}>
-          <TouchableOpacity style={styles.controlButton}>
-            <Ionicons name="play-skip-back" size={32} color="#fff" />
+          <TouchableOpacity onPress={skipToPrevious} style={styles.controlButton}>
+            <Ionicons name="play-skip-back" size={32} color="#333" />
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -76,12 +125,12 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
             <Ionicons 
               name={isPlaying ? 'pause' : 'play'} 
               size={40} 
-              color="#000" 
+              color="#fff" 
             />
           </TouchableOpacity>
           
-          <TouchableOpacity style={styles.controlButton}>
-            <Ionicons name="play-skip-forward" size={32} color="#fff" />
+          <TouchableOpacity onPress={skipToNext} style={styles.controlButton}>
+            <Ionicons name="play-skip-forward" size={32} color="#333" />
           </TouchableOpacity>
         </View>
       </View>
@@ -92,11 +141,17 @@ const PlayerScreen: React.FC<PlayerScreenProps> = ({ visible, onClose }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#121212',
+    backgroundColor: '#FFFFFF',
     paddingTop: 50,
     paddingHorizontal: 20,
   },
+  content: {
+    flex: 1,
+    justifyContent: 'space-between',
+  },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 40,
   },
@@ -104,7 +159,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#333',
+    backgroundColor: '#F5F5F5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    gap: 15,
+  },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#F5F5F5',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -116,35 +183,36 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 20,
-    backgroundColor: '#333',
+    backgroundColor: '#F5F5F5',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.1,
     shadowRadius: 20,
-    elevation: 20,
+    elevation: 10,
   },
   trackInfo: {
     alignItems: 'center',
     marginBottom: 40,
+    maxWidth: '100%',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#fff',
+    color: '#333',
     textAlign: 'center',
     marginBottom: 8,
   },
   artist: {
-    fontSize: 18,
-    color: '#999',
+    fontSize: 16,
+    color: '#666',
     textAlign: 'center',
   },
   progressContainer: {
-    marginBottom: 40,
+    marginBottom: 30,
   },
   progressBar: {
     height: 4,
-    backgroundColor: '#333',
+    backgroundColor: '#F5F5F5',
     borderRadius: 2,
     marginBottom: 8,
   },
@@ -158,14 +226,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   timeText: {
-    color: '#999',
+    color: '#666',
     fontSize: 12,
+  },
+  seekControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 15,
+  },
+  seekButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    gap: 4,
+  },
+  seekText: {
+    fontSize: 12,
+    color: '#666',
+    fontWeight: '500',
   },
   controls: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 40,
+    paddingBottom: 40,
   },
   controlButton: {
     padding: 10,

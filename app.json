@@ -4,12 +4,12 @@
     "slug": "MUssiCK",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/musik.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/musik.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true
@@ -17,8 +17,8 @@
     "android": {
       "package": "com.mokshdhiman.mussick",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "foregroundImage": "./assets/musik.png",
+        "backgroundColor": "#FFFFFF"
       },
       "permissions": [
         "android.permission.INTERNET",
@@ -48,6 +48,11 @@
           }
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "fb8c29a5-30a8-4318-a19e-18fe22df0746"
+      }
+    }
   }
 }

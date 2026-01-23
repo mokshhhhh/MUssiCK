@@ -3,7 +3,8 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import HomeScreen from '../screens/HomeScreen';
 import SearchScreen from '../screens/SearchScreen';
-import PlaylistsScreen from '../screens/PlaylistsScreen';
+import PlaylistsScreen from '../screens/PlaylistScreen';
+import FavoritesScreen from '../screens/FavoritesScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 
 const TabNavigator: React.FC = () => {
@@ -16,6 +17,8 @@ const TabNavigator: React.FC = () => {
         return <HomeScreen key="home" />;
       case 'Search':
         return <SearchScreen key="search" />;
+      case 'Favorites':
+        return <FavoritesScreen key="favorites" />;
       case 'Playlists':
         return <PlaylistsScreen key="playlists" />;
       case 'Settings':
@@ -28,6 +31,7 @@ const TabNavigator: React.FC = () => {
   const tabs = [
     { name: 'Home', icon: 'home' },
     { name: 'Search', icon: 'search' },
+    { name: 'Favorites', icon: 'heart' },
     { name: 'Playlists', icon: 'book' },
     { name: 'Settings', icon: 'settings' },
   ];

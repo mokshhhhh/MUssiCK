@@ -10,67 +10,101 @@ import {
   TouchableOpacity,
   SafeAreaView,
   Modal,
+  Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import TrackPlayer from 'react-native-track-player';
 import { useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/RootNavigator';
-import { searchSongs, Song, Album, searchAlbums, getAlbumSongs } from '../services/api';
+import { searchSongs, Song, Album, searchAlbums, getAlbumSongs, searchArtists, Artist } from '../services/api';
+import { useMusicStore } from '../store/useMusicStore';
+import SongMenuModal from '../components/SongMenuModal';
 
 const logo = require('../../assets/musik.png');
 
 const { width } = Dimensions.get('window');
 
-const mockRecentlyPlayed = [
-  { id: '1', title: 'Song 1', artist: 'Artist 1', artwork: 'https://placehold.co/200x200.png?text=Song1' },
-  { id: '2', title: 'Song 2', artist: 'Artist 2', artwork: 'https://placehold.co/200x200.png?text=Song2' },
-  { id: '3', title: 'Song 3', artist: 'Artist 3', artwork: 'https://placehold.co/200x200.png?text=Song3' },
-  { id: '4', title: 'Song 4', artist: 'Artist 4', artwork: 'https://placehold.co/200x200.png?text=Song4' },
-  { id: '5', title: 'Song 5', artist: 'Artist 5', artwork: 'https://placehold.co/200x200.png?text=Song5' },
-];
-
-const mockArtists = [
-  { id: '1', name: 'Artist A', artwork: 'https://placehold.co/100x100.png?text=A' },
-  { id: '2', name: 'Artist B', artwork: 'https://placehold.co/100x100.png?text=B' },
-  { id: '3', name: 'Artist C', artwork: 'https://placehold.co/100x100.png?text=C' },
-  { id: '4', name: 'Artist D', artwork: 'https://placehold.co/100x100.png?text=D' },
-  { id: '5', name: 'Artist E', artwork: 'https://placehold.co/100x100.png?text=E' },
-];
-
 const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
+  const { playTrack } = useMusicStore();
+  
   const [activeTab, setActiveTab] = useState('Suggested');
+  const tabs = ['Suggested', 'Songs', 'Albums', 'Artists'];
+
+  // --- State ---
   const [allSongs, setAllSongs] = useState<Song[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [menuVisible, setMenuVisible] = useState(false);
   const [selectedSong, setSelectedSong] = useState<Song | null>(null);
   const [filterVisible, setFilterVisible] = useState(false);
+  
   const [sortBy, setSortBy] = useState('title');
   const [sortOrder, setSortOrder] = useState('asc');
   const [sortedSongs, setSortedSongs] = useState<Song[]>([]);
+  
   const [allAlbums, setAllAlbums] = useState<Album[]>([]);
   const [albumSortBy, setAlbumSortBy] = useState('year');
   const [albumSortOrder, setAlbumSortOrder] = useState('desc');
   const [sortedAlbums, setSortedAlbums] = useState<Album[]>([]);
   const [selectedAlbum, setSelectedAlbum] = useState<Album | null>(null);
   const [albumSongs, setAlbumSongs] = useState<Song[]>([]);
+  
+  const [artists, setArtists] = useState<Artist[]>([]);
+
+  // Pagination State (For Songs Tab)
+  const [page, setPage] = useState(1);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMoreData, setHasMoreData] = useState(true);
+
+  // Real Data State (For Suggested Tab)
+  const [recentlyPlayed, setRecentlyPlayed] = useState<Song[]>([]);
+  const [suggestedArtists, setSuggestedArtists] = useState<Artist[]>([]);
+  const [trendingAlbums, setTrendingAlbums] = useState<Album[]>([]);
+
+  // --- 1. Pagination Logic for Songs Tab ---
+  const loadSongs = async (pageNum: number) => {
+    if (isLoadingMore) return;
+    setIsLoadingMore(true);
+
+    try {
+      const newSongs = await searchSongs('Hindi', pageNum, 20);
+      
+      if (newSongs.length > 0) {
+        if (pageNum === 1) {
+          setAllSongs(newSongs);
+        } else {
+          setAllSongs(prev => [...prev, ...newSongs]);
+        }
+        setTotalCount(prev => (pageNum === 1 ? newSongs.length : prev + newSongs.length)); 
+      } else {
+        setHasMoreData(false);
+      }
+    } catch (error) {
+      console.error("Error loading songs:", error);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  };
+
+  const handleLoadMore = () => {
+    if (!isLoadingMore && hasMoreData) {
+      const nextPage = page + 1;
+      setPage(nextPage);
+      loadSongs(nextPage);
+    }
+  };
 
   useEffect(() => {
-    const fetchSongs = async () => {
-      const response = await searchSongs('Hindi');
-      const limitedSongs = response.slice(0, 20);
-      setAllSongs(limitedSongs);
-      setTotalCount(limitedSongs.length);
-    };
-    fetchSongs();
+    loadSongs(1);
   }, []);
 
+  // --- 2. Sorting Logic ---
   const applySort = (songs: Song[], criterion: string, order: string) => {
     const sorted = [...songs].sort((a, b) => {
       let valA = criterion === 'artist' ? a.artist : a.title;
       let valB = criterion === 'artist' ? b.artist : b.title;
 
-      // Safety check for nulls
       valA = valA ? valA.toLowerCase() : '';
       valB = valB ? valB.toLowerCase() : '';
 
@@ -107,6 +141,12 @@ const HomeScreen: React.FC = () => {
   }, [allSongs, sortBy, sortOrder]);
 
   useEffect(() => {
+    const sorted = sortAlbums(allAlbums, albumSortBy, albumSortOrder);
+    setSortedAlbums(sorted);
+  }, [allAlbums, albumSortBy, albumSortOrder]);
+
+  // --- 3. Tab Specific Data Fetching ---
+  useEffect(() => {
     if (activeTab === 'Albums' && allAlbums.length === 0) {
       const fetchAlbums = async () => {
         const response = await searchAlbums('Hindi');
@@ -117,29 +157,114 @@ const HomeScreen: React.FC = () => {
   }, [activeTab]);
 
   useEffect(() => {
-    const sorted = sortAlbums(allAlbums, albumSortBy, albumSortOrder);
-    setSortedAlbums(sorted);
-  }, [allAlbums, albumSortBy, albumSortOrder]);
+    if (activeTab === 'Artists' && artists.length === 0) {
+      // UPDATED: Fetch 25 Specific Popular Artists (Ensures Images & Quality)
+      const fetchArtistsData = async () => {
+        const popularArtists = [
+          'Arijit Singh', 'Shreya Ghoshal', 'The Weeknd', 'Taylor Swift', 
+          'Diljit Dosanjh', 'Badshah', 'Neha Kakkar', 'Atif Aslam',
+          'Sonu Nigam', 'Sunidhi Chauhan', 'Drake', 'BTS', 
+          'Justin Bieber', 'Ed Sheeran', 'Guru Randhawa', 'Jubin Nautiyal', 
+          'Udit Narayan', 'Alka Yagnik', 'Kumar Sanu', 'Darshan Raval',
+          'Mika Singh', 'Yo Yo Honey Singh', 'Kishore Kumar', 'Lata Mangeshkar', 'Armaan Malik'
+        ];
+
+        let foundArtists: Artist[] = [];
+        
+        // Fetch in parallel for speed, but process individually
+        // Note: We search for specific names, so we expect high quality results
+        for (const name of popularArtists) {
+            try {
+                const results = await searchArtists(name);
+                if (results && results.length > 0) {
+                    // Prefer exact matches or those with valid artwork
+                    const validArtist = results.find(a => a.artwork && a.artwork.trim() !== '') || results[0];
+                    if (validArtist) {
+                        foundArtists.push(validArtist);
+                    }
+                }
+            } catch (e) {
+                console.log(`Failed to fetch artist: ${name}`);
+            }
+        }
+        
+        // Remove duplicate IDs just in case
+        const uniqueArtists = foundArtists.filter((artist, index, self) => 
+          index === self.findIndex((a) => a.id === artist.id)
+        );
+        
+        setArtists(uniqueArtists);
+      };
+      fetchArtistsData();
+    }
+  }, [activeTab]);
+
+  // --- 4. Suggested Tab Real Data ---
+  useEffect(() => {
+    const fetchSuggestedData = async () => {
+      try {
+        const weekndSongs = await searchSongs('Starboy The Weeknd');
+        const arijitSongs = await searchSongs('Arijit Singh');
+        const combinedRecent = [...(weekndSongs.slice(0, 1)), ...(arijitSongs.slice(0, 4))];
+        setRecentlyPlayed(combinedRecent);
+
+        // Specific artists for Suggested widget (Horizontal)
+        const targetArtists = ['Arijit Singh', 'Pritam', 'Badshah', 'Jonita Gandhi', 'Eminem', 'The Weeknd', 'Javed Ali', 'Sonu Nigam'];
+        let foundArtists: Artist[] = [];
+        for (const name of targetArtists) {
+          try {
+            const results = await searchArtists(name);
+            if (results && results.length > 0) {
+                const bestMatch = results.find(a => a.artwork && a.artwork.trim() !== '') || results[0];
+                foundArtists.push(bestMatch);
+            }
+          } catch (e) { console.log(e); }
+        }
+        setSuggestedArtists(foundArtists);
+
+        const albumsResponse = await searchAlbums('Trending');
+        setTrendingAlbums(albumsResponse.slice(0, 8));
+        
+      } catch (error) {
+        console.error('Error fetching suggested data:', error);
+      }
+    };
+
+    if (activeTab === 'Suggested' && recentlyPlayed.length === 0) {
+      fetchSuggestedData();
+    }
+  }, [activeTab]);
 
   const fetchAlbumSongs = async (albumId: string) => {
     const songs = await getAlbumSongs(albumId);
     setAlbumSongs(songs);
   };
 
-  const tabs = ['Suggested', 'Favorites', 'Albums', 'Songs'];
+  // --- Render Functions ---
 
-  const renderRecentlyPlayed = ({ item }: { item: any }) => (
-    <View style={styles.recentCard}>
+  const renderRecentlyPlayed = ({ item }: { item: Song }) => (
+    <TouchableOpacity style={styles.recentCard} onPress={() => playTrack(item)}>
       <Image source={{ uri: item.artwork }} style={styles.recentImage} />
       <Text style={styles.recentTitle} numberOfLines={1}>{item.title}</Text>
       <Text style={styles.recentArtist} numberOfLines={1}>{item.artist}</Text>
-    </View>
+    </TouchableOpacity>
   );
 
-  const renderArtist = ({ item }: { item: any }) => (
-    <View style={styles.artistCard}>
-      <Image source={{ uri: item.artwork }} style={styles.artistImage} />
+  const renderArtistHorizontal = ({ item }: { item: Artist }) => (
+    <TouchableOpacity style={styles.artistCard} onPress={() => navigation.navigate('ArtistDetails', { artist: item })}>
+      <Image 
+        source={{ uri: item.artwork || item.image?.[2]?.link || item.image?.[0]?.link || 'https://placehold.co/100x100/FF5733/ffffff?text=A' }} 
+        style={styles.artistImage}
+      />
       <Text style={styles.artistName} numberOfLines={1}>{item.name}</Text>
+    </TouchableOpacity>
+  );
+
+  const renderTrendingAlbumItem = ({ item }: { item: Album }) => (
+    <View style={styles.trendingAlbumCard}>
+      <Image source={{ uri: item.artwork }} style={styles.trendingAlbumImage} />
+      <Text style={styles.trendingAlbumTitle} numberOfLines={1}>{item.title}</Text>
+      <Text style={styles.trendingAlbumArtist} numberOfLines={1}>{item.artist}</Text>
     </View>
   );
 
@@ -150,23 +275,10 @@ const HomeScreen: React.FC = () => {
         <Text style={styles.songTitle} numberOfLines={1}>{item.title}</Text>
         <Text style={styles.songArtist} numberOfLines={1}>{item.artist}</Text>
       </View>
-      <TouchableOpacity
-        style={styles.playButton}
-        onPress={async () => {
-          await TrackPlayer.reset();
-          await TrackPlayer.add(item);
-          await TrackPlayer.play();
-        }}
-      >
+      <TouchableOpacity style={styles.playButton} onPress={() => playTrack(item)}>
         <Feather name="play" size={16} color="#FFF" />
       </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.menuButton}
-        onPress={() => {
-          setSelectedSong(item);
-          setMenuVisible(true);
-        }}
-      >
+      <TouchableOpacity style={styles.menuButton} onPress={() => { setSelectedSong(item); setMenuVisible(true); }}>
         <Feather name="more-vertical" size={16} color="#666" />
       </TouchableOpacity>
     </View>
@@ -175,188 +287,147 @@ const HomeScreen: React.FC = () => {
   const renderSongsList = () => (
     <FlatList
       data={sortedSongs}
-      keyExtractor={(item) => item.id}
+      keyExtractor={(item, index) => `${item.id}-${index}`}
       key="songs-list"
+      onEndReached={handleLoadMore}
+      onEndReachedThreshold={0.5}
       ListHeaderComponent={() => (
         <View style={{ paddingHorizontal: 20, paddingVertical: 10, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
           <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>
-            {totalCount.toLocaleString()} songs
+            {totalCount > 0 ? `${totalCount.toLocaleString()}+ songs` : 'Songs'}
           </Text>
           <TouchableOpacity onPress={() => setFilterVisible(true)} style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={{ fontSize: 14, color: '#666' }}>By {sortBy === 'title' ? 'Title' : 'Artist'}</Text>
-            <TouchableOpacity onPress={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')} style={{ marginLeft: 5 }}>
-              <Feather name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} size={16} color="#666" />
-            </TouchableOpacity>
+            <Feather name={sortOrder === 'asc' ? 'arrow-up' : 'arrow-down'} size={16} color="#666" style={{ marginLeft: 5 }} />
           </TouchableOpacity>
         </View>
+      )}
+      ListFooterComponent={() => (
+        isLoadingMore ? (
+          <View style={{ padding: 20, alignItems: 'center' }}>
+            <ActivityIndicator size="small" color="#FF5733" />
+          </View>
+        ) : <View style={{ height: 80 }} />
       )}
       renderItem={renderSongItem}
       style={{ flex: 1 }}
     />
   );
 
+  const renderAlbumItem = ({ item }: { item: Album }) => (
+    <TouchableOpacity onPress={() => navigation.navigate('AlbumDetails', { album: item })}>
+      <View style={styles.albumCard}>
+        <Image source={{ uri: item.artwork }} style={styles.albumCardImage} />
+        <View style={styles.albumCardText}>
+          <Text style={styles.albumCardTitle} numberOfLines={1}>{item.title}</Text>
+          <Text style={styles.albumCardSubtitle} numberOfLines={1}>{item.artist} | {item.year}</Text>
+        </View>
+      </View>
+    </TouchableOpacity>
+  );
+
+  const renderAlbumsList = () => (
+    <FlatList
+      key="albums-grid"
+      data={sortedAlbums}
+      keyExtractor={(item) => item.id}
+      numColumns={2}
+      columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
+      renderItem={renderAlbumItem}
+      style={{ flex: 1 }}
+      ListFooterComponent={<View style={{ height: 80 }} />}
+    />
+  );
+
+  const renderArtistListItem = ({ item }: { item: Artist }) => (
+    <TouchableOpacity style={styles.artistListCard} onPress={() => navigation.navigate('ArtistDetails', { artist: item })}>
+      <View style={styles.artistImageContainer}>
+        <Image 
+          source={{ uri: item.artwork || item.image?.[2]?.link || item.image?.[0]?.link || 'https://placehold.co/100x100/FF5733/ffffff?text=A' }} 
+          style={styles.artistListImage} 
+        />
+      </View>
+      <View style={styles.artistInfo}>
+        <Text style={styles.artistListName} numberOfLines={1}>{item.name}</Text>
+      </View>
+      <Feather name="chevron-right" size={20} color="#CCC" />
+    </TouchableOpacity>
+  );
+
+  const renderArtistsList = () => (
+    <FlatList
+      key="artists-list"
+      data={artists}
+      keyExtractor={(item) => item.id}
+      renderItem={renderArtistListItem}
+      style={{ flex: 1, paddingTop: 10 }}
+      ListFooterComponent={<View style={{ height: 80 }} />}
+    />
+  );
+
   const renderSuggestedView = () => (
-    <ScrollView style={{ flex: 1 }}>
-      <Text style={styles.sectionTitle}>Recently Played</Text>
+    <ScrollView 
+      style={{ flex: 1 }}
+      keyboardShouldPersistTaps="never"
+    >
+      <Text style={styles.sectionTitle}>Trending Songs</Text>
       <FlatList
-        data={mockRecentlyPlayed}
+        data={recentlyPlayed}
         keyExtractor={(item) => item.id}
         renderItem={renderRecentlyPlayed}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
       />
+
       <Text style={styles.sectionTitle}>Artists</Text>
       <FlatList
-        data={mockArtists}
+        data={suggestedArtists}
         keyExtractor={(item) => item.id}
-        renderItem={renderArtist}
+        renderItem={renderArtistHorizontal}
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.horizontalList}
       />
-    </ScrollView>
-  );
 
-  const renderAlbumsList = () => {
-    if (selectedAlbum) {
-      return (
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 10 }}>
-            <TouchableOpacity onPress={() => setSelectedAlbum(null)} style={{ marginRight: 10 }}>
-              <Feather name="arrow-left" size={24} color="#FF5733" />
-            </TouchableOpacity>
-            <View>
-              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>{selectedAlbum.title}</Text>
-              <Text style={{ fontSize: 14, color: '#666' }}>{selectedAlbum.artist} • {selectedAlbum.year}</Text>
-            </View>
-          </View>
-          <FlatList
-            data={albumSongs}
-            keyExtractor={(item) => item.id}
-            renderItem={renderSongItem}
-            style={{ flex: 1 }}
-          />
-        </View>
-      );
-    }
-    return (
+      <Text style={styles.sectionTitle}>Trending Albums</Text>
       <FlatList
-        data={sortedAlbums}
+        data={trendingAlbums}
         keyExtractor={(item) => item.id}
-        numColumns={2}
-        key="albums-grid"
-        columnWrapperStyle={{ justifyContent: 'space-between', paddingHorizontal: 20 }}
-        renderItem={renderAlbumItem}
-        style={{ flex: 1 }}
+        renderItem={renderTrendingAlbumItem}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.horizontalList}
       />
-    );
-  };
-
-  const renderAlbumItem = ({ item }: { item: Album }) => (
-    <TouchableOpacity onPress={() => navigation.navigate('AlbumDetails', { album: item })}>
-      <View style={styles.albumCard}>
-        <Image source={{ uri: item.artwork }} style={styles.albumCardImage} />
-        <View style={styles.albumCardText}>
-          <View style={styles.albumCardTitleRow}>
-            <Text style={styles.albumCardTitle} numberOfLines={1}>{item.title}</Text>
-            <TouchableOpacity>
-              <Feather name="more-vertical" size={16} color="#666" />
-            </TouchableOpacity>
-          </View>
-          <Text style={styles.albumCardSubtitle} numberOfLines={1}>{item.artist} | {item.year}</Text>
-          <Text style={styles.albumCardMeta}>{item.songsCount} songs</Text>
-        </View>
-      </View>
-    </TouchableOpacity>
+      
+      <View style={{ height: 100 }} />
+    </ScrollView>
   );
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'Suggested':
-        return renderSuggestedView();
-      case 'Songs':
-        return renderSongsList();
-      case 'Albums':
-        return renderAlbumsList();
-      case 'Favorites':
-        return (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text>No Favorites Yet</Text>
-          </View>
-        );
-      default:
-        return renderSuggestedView();
+      case 'Suggested': return renderSuggestedView();
+      case 'Songs': return renderSongsList();
+      case 'Albums': return renderAlbumsList();
+      case 'Artists': return renderArtistsList();
+      default: return renderSuggestedView();
     }
-  };
-
-  const SongMenuModal = ({ visible, onClose, song }: { visible: boolean; onClose: () => void; song: Song | null }) => {
-    if (!song) return null;
-
-    const options = [
-      { icon: 'arrow-right-circle', label: 'Play Next' },
-      { icon: 'list', label: 'Add to Queue' },
-      { icon: 'plus-circle', label: 'Add to Playlist' },
-      { icon: 'disc', label: 'Go to Album' },
-      { icon: 'user', label: 'Go to Artist' },
-    ];
-
-    return (
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={visible}
-        onRequestClose={onClose}
-      >
-        <TouchableOpacity style={styles.overlay} onPress={onClose}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
-              <Image source={{ uri: song.artwork }} style={styles.modalThumb} />
-              <View style={styles.modalInfo}>
-                <Text style={styles.modalTitle} numberOfLines={1}>{song.title}</Text>
-                <Text style={styles.modalArtist} numberOfLines={1}>{song.artist}</Text>
-              </View>
-              <TouchableOpacity>
-                <Feather name="heart" size={20} color="#FF5733" />
-              </TouchableOpacity>
-            </View>
-            <View style={styles.optionsList}>
-              {options.map((option, index) => (
-                <TouchableOpacity key={index} style={styles.optionItem}>
-                  <Feather name={option.icon as any} size={24} color="#FFF" />
-                  <Text style={styles.optionText}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-        </TouchableOpacity>
-      </Modal>
-    );
   };
 
   const FilterModal = () => {
     const isSongsTab = activeTab === 'Songs';
-    const options = isSongsTab ? ['Ascending', 'Descending', 'Artist', 'Album', 'Year', 'Date Added', 'Date Modified', 'Composer'] : ['Year', 'Artist', 'Title'];
+    const options = isSongsTab ? ['Ascending', 'Descending', 'Artist', 'Album', 'Year', 'Date Added', 'Date Modified', 'Composer', 'Genre', 'Duration', 'Track Number', 'Playlist'] : ['Year', 'Artist', 'Title'];
 
     const handleOptionPress = (option: string) => {
       if (isSongsTab) {
-        if (option === 'Ascending') {
-          setSortOrder('asc');
-        } else if (option === 'Descending') {
-          setSortOrder('desc');
-        } else if (option === 'Artist') {
-          setSortBy('artist');
-        } else if (option === 'Title') {
-          setSortBy('title');
-        }
+        if (option === 'Ascending') setSortOrder('asc');
+        else if (option === 'Descending') setSortOrder('desc');
+        else if (option === 'Artist') setSortBy('artist');
+        else if (option === 'Title') setSortBy('title');
       } else {
-        if (option === 'Year') {
-          setAlbumSortBy('year');
-        } else if (option === 'Artist') {
-          setAlbumSortBy('artist');
-        } else if (option === 'Title') {
-          setAlbumSortBy('title');
-        }
+        if (option === 'Year') setAlbumSortBy('year');
+        else if (option === 'Artist') setAlbumSortBy('artist');
+        else if (option === 'Title') setAlbumSortBy('title');
       }
       setFilterVisible(false);
     };
@@ -417,7 +488,7 @@ const HomeScreen: React.FC = () => {
           style={styles.tabBar}
           contentContainerStyle={styles.tabContainer}
         >
-          {tabs.map((tab) => (
+          {tabs.map((tab: string) => (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, activeTab === tab && styles.activeTab]}
@@ -448,7 +519,7 @@ const styles = StyleSheet.create({
   },
   fixedTop: {
     backgroundColor: '#F5F5F5',
-    paddingTop: 50,
+    paddingTop: Platform.OS === 'android' ? 50 : 60, 
     paddingHorizontal: 16,
   },
   headerImage: {
@@ -459,7 +530,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
   },
   tabBar: {
-    paddingBottom: 10,
+    paddingBottom: 5,
   },
   tabContainer: {
     paddingHorizontal: 16,
@@ -481,16 +552,12 @@ const styles = StyleSheet.create({
     color: '#FF5733',
     fontWeight: 'bold',
   },
-  scrollableContent: {
-    flex: 1,
-    marginTop: 10,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
-    marginTop: 10,
+    marginBottom: 10,
+    marginTop: 15,
     paddingHorizontal: 16,
   },
   horizontalList: {
@@ -534,18 +601,65 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'center',
   },
-  centeredContent: {
-    flex: 1,
-    justifyContent: 'center',
+  trendingAlbumCard: {
+    width: 130,
+    marginRight: 15,
+  },
+  trendingAlbumImage: {
+    width: 130,
+    height: 130,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  trendingAlbumTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  trendingAlbumArtist: {
+    fontSize: 12,
+    color: '#888',
+  },
+  artistListCard: {
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-  },
-  centeredText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  songList: {
+    paddingVertical: 12,
     paddingHorizontal: 16,
+    backgroundColor: '#FFF',
+    marginHorizontal: 16,
+    marginBottom: 10,
+    borderRadius: 12,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+  artistImageContainer: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#EEE',
+    overflow: 'hidden',
+  },
+  artistListImage: {
+    width: '100%',
+    height: '100%',
+  },
+  artistInfo: {
+    flex: 1,
+    marginLeft: 15,
+    justifyContent: 'center',
+  },
+  artistListName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 4,
+  },
+  artistStats: {
+    fontSize: 13,
+    color: '#888',
   },
   songItem: {
     flexDirection: 'row',
@@ -618,53 +732,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#666',
     marginTop: 2,
-  },
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalSheet: {
-    backgroundColor: '#1E1E1E',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  modalThumb: {
-    width: 50,
-    height: 50,
-    borderRadius: 8,
-    marginRight: 12,
-  },
-  modalInfo: {
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFF',
-  },
-  modalArtist: {
-    fontSize: 14,
-    color: '#CCC',
-  },
-  optionsList: {
-    marginTop: 10,
-  },
-  optionItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 15,
-  },
-  optionText: {
-    fontSize: 16,
-    color: '#FFF',
-    marginLeft: 15,
   },
   filterOverlay: {
     flex: 1,
